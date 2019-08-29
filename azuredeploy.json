@@ -231,7 +231,7 @@
                 }
             },
             "sku": {
-                "name": "Standard_F3s_v2",
+                "name": "Standard_F4s_v2",
                 "tier": "Standard",
                 "capacity": 2
             },
