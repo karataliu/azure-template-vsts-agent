@@ -3,39 +3,43 @@
     "contentVersion": "1.0.0.0",
     "parameters": {
         "prefix": {
-            "defaultValue": "[resourceGroup().name]",
             "type": "string",
+            "defaultValue": "[resourceGroup().name]",
             "metadata": {
                 "description": "prefix to be used in template"
             }
         },
         "username": {
-            "defaultValue": "atbuser",
             "type": "string",
+            "defaultValue": "atbuser",
             "metadata": {
                 "description": "user name for all VMs"
             }
         },
         "sshPub": {
             "type": "string",
+            "defaultValue": null,
             "metadata": {
                 "description": "ssh public key for linux VMs"
             }
         },
         "vstsUrl": {
             "type": "string",
+            "defaultValue": null,
             "metadata": {
                 "description": "Url for vsts service"
             }
         },
         "vstsPool": {
             "type": "string",
+            "defaultValue": null,
             "metadata": {
                 "description": "Pool for vsts service"
             }
         },
         "vstsToken": {
             "type": "securestring",
+            "defaultValue": null,
             "metadata": {
                 "description": "Token for vsts service"
             }
@@ -46,15 +50,15 @@
         "nvn_default_id": "[resourceId('Microsoft.Network/virtualNetworks','default')]",
         "npipa_jump_id": "[resourceId('Microsoft.Network/publicIPAddresses','jump')]",
         "nni_jump_id": "[resourceId('Microsoft.Network/networkInterfaces','jump')]",
-        "cdata": "[concat('#cloud-config\nwrite_files:\n- path: /opt/atb/scripts/00_aptupdate\n  permissions: \"0755\"\n  owner: root\n  content: |-\n    apt update\n- path: /opt/atb/scripts/01_installDocker\n  permissions: \"0755\"\n  owner: root\n  content: |+\n    #!/bin/bash\n    DOCKER_DISK=/dev/disk/azure/scsi1/lun0\n    DOCKER_MOUNT=/var/lib/docker\n    mkfs.btrfs $DOCKER_DISK\n    mkdir -p $DOCKER_MOUNT\n    echo \"$DOCKER_DISK $DOCKER_MOUNT btrfs rw,relatime 0 2\" >> /etc/fstab\n    mount -a\n\n    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -\n    add-apt-repository \\\n        \"deb [arch=amd64] https://download.docker.com/linux/ubuntu \\\n        $(lsb_release -cs) \\\n        stable\"\n    apt update\n    DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install \\\n        build-essential docker-ce=18.03.1~ce-0~ubuntu\n    usermod -aG docker $USER\n- path: /opt/atb/scripts/02_installAzureCli\n  permissions: \"0755\"\n  owner: root\n  content: |+\n    #!/bin/bash\n    LCS=$(lsb_release -cs)\n    echo \"deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $LCS main\" | \\\n        tee /etc/apt/sources.list.d/azure-cli.list\n    curl -L https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -\n    apt install apt-transport-https\n    apt update\n    apt install azure-cli=2.0.45-1~$LCS\n- path: /opt/atb/scripts/03_installTfsAgent\n  permissions: \"0755\"\n  owner: root\n  content: |+\n    #!/bin/bash\n    FN=vsts-agent-linux-x64-2.134.2.tar.gz\n    FILE=/tmp/vsts-agent-linux-x64-2.134.2.tar.gz\n    DIR=/home/$USER/vsoagent\n    wget https://vstsagentpackage.azureedge.net/agent/2.134.2/$FN -O $FILE\n\n    sudo -u $USER -s -- <<EOF\n    mkdir -p $DIR\n    tar xf $FILE -C $DIR\n    EOF\n\n    export VSTS_AGENT_INPUT_URL=$VSTS_URL\n    export VSTS_AGENT_INPUT_POOL=$VSTS_POOL\n    export VSTS_AGENT_INPUT_TOKEN=$VSTS_TOKEN\n    export VSTS_AGENT_INPUT_AUTH=pat\n    export VSTS_AGENT_INPUT_AGENT=$HOSTNAME\n    export VSTS_AGENT_INPUT_WORK=_work\n\n    cd $DIR\n    bin/installdependencies.sh\n    sudo -E -u $USER ./config.sh --unattended --acceptTeeEula\n    ./svc.sh install $USER\n    ./svc.sh start\n- path: /opt/atb/scripts/04_installTooling\n  permissions: \"0755\"\n  owner: root\n  content: |2+\n\n    DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install unzip\n- path: /opt/atb/scripts/05_aptInstall\n  permissions: \"0755\"\n  owner: root\n  content: |-\n    DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install zsh jq\n- path: /opt/atb/scripts/06_installGo\n  permissions: \"0755\"\n  owner: root\n  content: |+\n    #!/bin/bash\n    TMP_DIR=$(mktemp -d)\n    pushd $TMP_DIR\n\n    curl -LO https://dl.google.com/go/go1.10.3.linux-amd64.tar.gz\n    tar xf go1.10.3.linux-amd64.tar.gz -C /usr/local\n\n    popd\n    rm -rf $TMP_DIR\n- path: /opt/atb/scripts/07_installKubetools\n  permissions: \"0755\"\n  owner: root\n  content: |+\n    #!/bin/bash\n    TMP_DIR=$(mktemp -d)\n    pushd $TMP_DIR\n\n    curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl\n    chmod +x kubectl\n    mv kubectl /usr/local/bin\n\n    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.9.1-linux-amd64.tar.gz\n    tar xf helm-v2.9.1-linux-amd64.tar.gz\n    chmod +x linux-amd64/helm\n    mv linux-amd64/helm /usr/local/bin\n\n    popd\n    rm -rf $TMP_DIR\n- path: /opt/atb/scripts/run\n  permissions: \"0755\"\n  owner: root\n  content: |+\n    #!/bin/bash\n    set -e\n\n    scripts=($(dirname $0)/0*)\n    for file in ${scripts[@]}\n    do\n        echo Begin $file\n        $file\n        echo End $file\n    done\nruncmd:\n- ',' USER=\"',parameters('username'),'\"',' VSTS_URL=\"',parameters('vstsUrl'),'\"',' VSTS_POOL=\"',parameters('vstsPool'),'\"',' VSTS_TOKEN=\"',parameters('vstsToken'),'\"',' /opt/atb/scripts/run| tee /opt/atb/run.log')]",
+        "cdata": "[concat('#cloud-config\nwrite_files:\n- path: /opt/atb/scripts/00_aptupdate\n  permissions: \"0755\"\n  owner: root\n  content: |-\n    apt update\n- path: /opt/atb/scripts/01_installDocker\n  permissions: \"0755\"\n  owner: root\n  content: \"#!/bin/bash\\nDOCKER_DISK=/dev/disk/azure/scsi1/lun0\\nDOCKER_MOUNT=/var/lib/docker\\nmkfs.btrfs $DOCKER_DISK\\nmkdir -p $DOCKER_MOUNT\\necho \\\"$DOCKER_DISK $DOCKER_MOUNT btrfs rw,relatime 0 2\\\" >> /etc/fstab\\nmount -a\\n\\nLCS=$(lsb_release -cs)\\ncurl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -\\nadd-apt-repository \\\\\\n    \\\"deb [arch=amd64] https://download.docker.com/linux/ubuntu \\\\\\n    ${LCS} \\\\\\n    stable\\\"\\napt update\\nDEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install \\\\\\n    docker-ce=5:18.09.4~3-0~ubuntu-${LCS}\\n# build-essential \\nusermod -aG docker $USER\\n\"\n- path: /opt/atb/scripts/02_installAzureCli\n  permissions: \"0755\"\n  owner: root\n  content: |\n    #!/bin/bash\n    LCS=$(lsb_release -cs)\n    echo \"deb [arch=amd64] https://packages.microsoft.com/repos/azure-cli/ $LCS main\" | \\\n        tee /etc/apt/sources.list.d/azure-cli.list\n    curl -L https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -\n    apt install apt-transport-https\n    apt update\n    apt install azure-cli=2.0.61-1~$LCS\n- path: /opt/atb/scripts/03_installTfsAgent\n  permissions: \"0755\"\n  owner: root\n  content: |\n    #!/bin/bash\n    FN=vsts-agent-linux-x64-2.155.1.tar.gz\n    FILE=/tmp/vsts-agent-linux-x64-2.155.1.tar.gz\n    DIR=/home/$USER/vsoagent\n    wget https://vstsagentpackage.azureedge.net/agent/2.155.1/$FN -O $FILE\n\n    sudo -u $USER -s -- <<EOF\n    mkdir -p $DIR\n    tar xf $FILE -C $DIR\n    EOF\n\n    export VSTS_AGENT_INPUT_URL=$VSTS_URL\n    export VSTS_AGENT_INPUT_POOL=$VSTS_POOL\n    export VSTS_AGENT_INPUT_TOKEN=$VSTS_TOKEN\n    export VSTS_AGENT_INPUT_AUTH=pat\n    export VSTS_AGENT_INPUT_AGENT=$HOSTNAME\n    export VSTS_AGENT_INPUT_WORK=_work\n\n    cd $DIR\n    bin/installdependencies.sh\n    sudo -E -u $USER ./config.sh --unattended --acceptTeeEula\n    ./svc.sh install $USER\n    ./svc.sh start\n- path: /opt/atb/scripts/04_installTooling\n  permissions: \"0755\"\n  owner: root\n  content: |2\n\n    DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install unzip\n- path: /opt/atb/scripts/05_aptInstall\n  permissions: \"0755\"\n  owner: root\n  content: |-\n    DEBIAN_FRONTEND=noninteractive apt -y --no-install-recommends install zsh jq\n- path: /opt/atb/scripts/06_installGo\n  permissions: \"0755\"\n  owner: root\n  content: |\n    #!/bin/bash\n    TMP_DIR=$(mktemp -d)\n    pushd $TMP_DIR\n\n    curl -LO https://dl.google.com/go/go1.11.13.linux-amd64.tar.gz\n    tar xf go1.11.13.linux-amd64.tar.gz -C /usr/local\n    mv /usr/local/go /usr/local/go1.11\n\n    popd\n    rm -rf $TMP_DIR\n- path: /opt/atb/scripts/07_installKubetools\n  permissions: \"0755\"\n  owner: root\n  content: |\n    #!/bin/bash\n    TMP_DIR=$(mktemp -d)\n    pushd $TMP_DIR\n\n    curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl\n    chmod +x kubectl\n    mv kubectl /usr/local/bin\n\n    curl -LO https://storage.googleapis.com/kubernetes-helm/helm-v2.9.1-linux-amd64.tar.gz\n    tar xf helm-v2.9.1-linux-amd64.tar.gz\n    chmod +x linux-amd64/helm\n    mv linux-amd64/helm /usr/local/bin\n\n    popd\n    rm -rf $TMP_DIR\n- path: /opt/atb/scripts/08_installPwsh\n  permissions: \"0755\"\n  owner: root\n  content: |\n    #!/bin/bash\n    TMP_DIR=$(mktemp -d)\n    pushd $TMP_DIR\n\n    wget -q https://packages.microsoft.com/config/ubuntu/16.04/packages-microsoft-prod.deb\n    dpkg -i packages-microsoft-prod.deb\n    apt-get update\n    apt-get install -y powershell\n\n    popd\n    rm -rf $TMP_DIR\n- path: /opt/atb/scripts/run\n  permissions: \"0755\"\n  owner: root\n  content: |\n    #!/bin/bash\n    set -e\n\n    scripts=($(dirname $0)/0*)\n    for file in ${scripts[@]}\n    do\n        echo Begin $file\n        $file\n        echo End $file\n    done\nruncmd:\n- ',' USER=\"',parameters('username'),'\"',' VSTS_URL=\"',parameters('vstsUrl'),'\"',' VSTS_POOL=\"',parameters('vstsPool'),'\"',' VSTS_TOKEN=\"',parameters('vstsToken'),'\"',' /opt/atb/scripts/run| tee /opt/atb/run.log')]",
         "cvmss_vsoagents_customdata": "[variables('cdata')]"
     },
     "resources": [
         {
-            "type": "Microsoft.Network/virtualNetworks",
             "apiVersion": "2017-10-01",
-            "name": "default",
+            "type": "Microsoft.Network/virtualNetworks",
             "location": "[variables('location')]",
+            "name": "default",
             "properties": {
                 "addressSpace": {
                     "addressPrefixes": [
@@ -72,10 +76,10 @@
             }
         },
         {
-            "type": "Microsoft.Network/publicIPAddresses",
             "apiVersion": "2017-10-01",
-            "name": "jump",
+            "type": "Microsoft.Network/publicIPAddresses",
             "location": "[variables('location')]",
+            "name": "jump",
             "properties": {
                 "dnsSettings": {
                     "domainNameLabel": "[concat(parameters('prefix'),'jumpbox')]"
@@ -83,14 +87,10 @@
             }
         },
         {
-            "type": "Microsoft.Network/networkInterfaces",
             "apiVersion": "2017-10-01",
-            "name": "jump",
+            "type": "Microsoft.Network/networkInterfaces",
             "location": "[variables('location')]",
-            "dependsOn": [
-                "[variables('nvn_default_id')]",
-                "[variables('npipa_jump_id')]"
-            ],
+            "name": "jump",
             "properties": {
                 "ipConfigurations": [
                     {
@@ -106,16 +106,17 @@
                         }
                     }
                 ]
-            }
+            },
+            "dependsOn": [
+                "[variables('nvn_default_id')]",
+                "[variables('npipa_jump_id')]"
+            ]
         },
         {
-            "type": "Microsoft.Compute/virtualMachines",
             "apiVersion": "2017-03-30",
-            "name": "jump",
+            "type": "Microsoft.Compute/virtualMachines",
             "location": "[variables('location')]",
-            "dependsOn": [
-                "[variables('nni_jump_id')]"
-            ],
+            "name": "jump",
             "properties": {
                 "hardwareProfile": {
                     "vmSize": "Standard_B1s"
@@ -131,7 +132,7 @@
                     "imageReference": {
                         "publisher": "Canonical",
                         "offer": "UbuntuServer",
-                        "sku": "16.04-LTS",
+                        "sku": "18.04-LTS",
                         "version": "latest"
                     },
                     "osDisk": {
@@ -153,21 +154,16 @@
                     },
                     "computerName": "[concat(parameters('prefix'),'jumpbox')]"
                 }
-            }
+            },
+            "dependsOn": [
+                "[variables('nni_jump_id')]"
+            ]
         },
         {
-            "type": "Microsoft.Compute/virtualMachineScaleSets",
             "apiVersion": "2017-03-30",
-            "name": "vsoagents",
+            "type": "Microsoft.Compute/virtualMachineScaleSets",
             "location": "[variables('location')]",
-            "dependsOn": [
-                "[variables('nvn_default_id')]"
-            ],
-            "sku": {
-                "name": "Standard_F2s_v2",
-                "tier": "Standard",
-                "capacity": 3
-            },
+            "name": "vsoagents",
             "properties": {
                 "virtualMachineProfile": {
                     "osProfile": {
@@ -233,7 +229,15 @@
                 "upgradePolicy": {
                     "mode": "Manual"
                 }
-            }
+            },
+            "sku": {
+                "name": "Standard_F3s_v2",
+                "tier": "Standard",
+                "capacity": 2
+            },
+            "dependsOn": [
+                "[variables('nvn_default_id')]"
+            ]
         }
     ]
 }
